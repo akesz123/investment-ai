@@ -1,6 +1,24 @@
 version: '3.9'
+
 services:
-  app:
+  backend:
     build: .
+    container_name: investment-ai-backend
+    environment:
+      - APP_NAME=Investment AI
+      - DEBUG=true
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///./investment_ai.db}
     ports:
       - '8000:8000'
+    command: uvicorn backend.api.main:app --host 0.0.0.0 --port 8000
+
+  frontend:
+    build: .
+    container_name: investment-ai-frontend
+    depends_on:
+      - backend
+    environment:
+      - STREAMLIT_SERVER_PORT=8501
+    ports:
+      - '8501:8501'
+    command: streamlit run frontend/app.py --server.port 8501 --server.address 0.0.0.0
