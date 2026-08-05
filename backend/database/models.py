@@ -48,6 +48,7 @@ class TechnicalIndicator(Base):
     id = Column(Integer, primary_key=True)
     price_id = Column(Integer, ForeignKey("prices.id"), index=True, nullable=False)
 
+    # Core oscillators and trend indicators
     rsi = Column(Float, nullable=True)
     macd = Column(Float, nullable=True)
     macd_signal = Column(Float, nullable=True)
@@ -56,21 +57,45 @@ class TechnicalIndicator(Base):
     ema50 = Column(Float, nullable=True)
     ema100 = Column(Float, nullable=True)
     ema200 = Column(Float, nullable=True)
+    sma20 = Column(Float, nullable=True)
+    sma50 = Column(Float, nullable=True)
+    sma200 = Column(Float, nullable=True)
     vwap = Column(Float, nullable=True)
     adx = Column(Float, nullable=True)
     atr = Column(Float, nullable=True)
     obv = Column(Float, nullable=True)
-    bb_upper = Column(Float, nullable=True)
-    bb_middle = Column(Float, nullable=True)
-    bb_lower = Column(Float, nullable=True)
-    stoch_rsi = Column(Float, nullable=True)
-    ichimoku_span_a = Column(Float, nullable=True)
-    ichimoku_span_b = Column(Float, nullable=True)
-    ichimoku_conversion = Column(Float, nullable=True)
-    ichimoku_base = Column(Float, nullable=True)
-    supertrend = Column(Float, nullable=True)
+    roc = Column(Float, nullable=True)
     momentum = Column(Float, nullable=True)
-    trend_strength = Column(Float, nullable=True)
+    stochastic_k = Column(Float, nullable=True)
+    stochastic_d = Column(Float, nullable=True)
+    williams_r = Column(Float, nullable=True)
+    cci = Column(Float, nullable=True)
+
+    # Trend and regime features
+    golden_cross = Column(Boolean, nullable=True)  # SMA50 crosses above SMA200
+    death_cross = Column(Boolean, nullable=True)   # SMA50 crosses below SMA200
+    trend_slope_20d = Column(Float, nullable=True)
+    trend_slope_60d = Column(Float, nullable=True)
+    trend_slope_120d = Column(Float, nullable=True)
+    distance_from_52w_high = Column(Float, nullable=True)
+    distance_from_52w_low = Column(Float, nullable=True)
+
+    # Volatility features
+    rolling_vol_10d = Column(Float, nullable=True)
+    rolling_vol_30d = Column(Float, nullable=True)
+    rolling_vol_90d = Column(Float, nullable=True)
+    max_drawdown_90d = Column(Float, nullable=True)
+    downside_dev_30d = Column(Float, nullable=True)
+    sharpe_90d = Column(Float, nullable=True)
+    sortino_90d = Column(Float, nullable=True)
+    beta_vs_spy_252d = Column(Float, nullable=True)
+
+    # Volume and liquidity features
+    avg_volume_20d = Column(Float, nullable=True)
+    rel_volume = Column(Float, nullable=True)
+    mfi = Column(Float, nullable=True)
+    acc_dist = Column(Float, nullable=True)
+    vwap_deviation = Column(Float, nullable=True)
 
     price = relationship("Price", back_populates="technicals")
 
@@ -82,23 +107,37 @@ class FundamentalsSnapshot(Base):
     asset_id = Column(Integer, ForeignKey("assets.id"), index=True, nullable=False)
     as_of_date = Column(Date, index=True, nullable=False)
 
+    # Valuation
     pe = Column(Float, nullable=True)
     forward_pe = Column(Float, nullable=True)
     peg = Column(Float, nullable=True)
     pb = Column(Float, nullable=True)
     ps = Column(Float, nullable=True)
+    ev_ebitda = Column(Float, nullable=True)
+
+    # Profitability and quality
     roe = Column(Float, nullable=True)
     roa = Column(Float, nullable=True)
+    roic = Column(Float, nullable=True)
+    gross_margin = Column(Float, nullable=True)
+    operating_margin = Column(Float, nullable=True)
+    net_margin = Column(Float, nullable=True)
+
+    # Growth and cash flow
     revenue_growth = Column(Float, nullable=True)
     eps_growth = Column(Float, nullable=True)
+    free_cash_flow = Column(Float, nullable=True)
+
+    # Balance sheet and risk
     debt_to_equity = Column(Float, nullable=True)
-    cash_flow = Column(Float, nullable=True)
-    operating_margin = Column(Float, nullable=True)
-    profit_margin = Column(Float, nullable=True)
+    current_ratio = Column(Float, nullable=True)
+
+    # Ownership and dividends
     institutional_ownership = Column(Float, nullable=True)
     insider_ownership = Column(Float, nullable=True)
-    market_cap = Column(Float, nullable=True)
     dividend_yield = Column(Float, nullable=True)
+
+    market_cap = Column(Float, nullable=True)
 
     source = Column(String(50), nullable=True)
 
@@ -148,6 +187,7 @@ class MacroSnapshot(Base):
     id = Column(Integer, primary_key=True)
     as_of_date = Column(Date, index=True, nullable=False)
 
+    # Market regime & macro
     interest_rate = Column(Float, nullable=True)
     inflation = Column(Float, nullable=True)
     gdp_growth = Column(Float, nullable=True)
@@ -158,6 +198,9 @@ class MacroSnapshot(Base):
     fear_greed_index = Column(Float, nullable=True)
     dollar_index = Column(Float, nullable=True)
 
+    spy_trend_score = Column(Float, nullable=True)
+    sector_trend_score = Column(Float, nullable=True)
+    market_breadth_score = Column(Float, nullable=True)
     macro_score = Column(Float, nullable=True)
 
 
@@ -169,13 +212,36 @@ class ModelPrediction(Base):
     as_of_date = Column(Date, index=True, nullable=False)
 
     model_name = Column(String(100), nullable=False)
-    positive_30d_prob = Column(Float, nullable=True)
-    expected_return_30d = Column(Float, nullable=True)
-    expected_return_low = Column(Float, nullable=True)
-    expected_return_high = Column(Float, nullable=True)
-    confidence = Column(Float, nullable=True)
-    risk_level = Column(String(20), nullable=True)
+    forecast_horizon = Column(Integer, nullable=False)  # days
 
+    # Prediction outputs
+    expected_return = Column(Float, nullable=True)
+    expected_volatility = Column(Float, nullable=True)
+    expected_low = Column(Float, nullable=True)
+    expected_high = Column(Float, nullable=True)
+
+    probability_positive = Column(Float, nullable=True)
+    probability_5_percent = Column(Float, nullable=True)
+    probability_minus5_percent = Column(Float, nullable=True)
+
+    # Decomposed scores
+    trend_score = Column(Float, nullable=True)
+    momentum_score = Column(Float, nullable=True)
+    quality_score = Column(Float, nullable=True)
+    valuation_score = Column(Float, nullable=True)
+    risk_score = Column(Float, nullable=True)
+    volume_score = Column(Float, nullable=True)
+    sentiment_score = Column(Float, nullable=True)
+    confidence_score = Column(Float, nullable=True)
+
+    # Backtesting and accuracy
+    backtest_accuracy = Column(Float, nullable=True)
+    win_rate = Column(Float, nullable=True)
+    avg_return = Column(Float, nullable=True)
+    avg_drawdown = Column(Float, nullable=True)
+    avg_prediction_error = Column(Float, nullable=True)
+
+    # Aggregate AI Score
     ai_score = Column(Float, nullable=True)
     ai_score_explanation = Column(String(4000), nullable=True)
 
