@@ -27,8 +27,8 @@ def scan_market(db: Session = Depends(get_db)):
     - Loads major ETFs + sample stocks,
     - Fetches recent historical prices,
     - Stores the latest Price per asset,
-    - Computes a simple baseline prediction per asset so that the UI has
-      something to display before the full ML stack is implemented.
+    - Computes a baseline multi-horizon prediction per asset so that the UI has
+      something meaningful to display while the full ML stack evolves.
 
     All scores are heuristic and must NOT be interpreted as guaranteed
     future returns or financial advice.
@@ -36,7 +36,6 @@ def scan_market(db: Session = Depends(get_db)):
 
     tickers: List[str] = []
 
-    # Major ETFs and sample stocks from YahooFinanceService
     tickers.extend(yf_service.get_major_etfs())
     tickers.extend(yf_service.get_sample_stocks())
 
@@ -46,7 +45,6 @@ def scan_market(db: Session = Depends(get_db)):
     for ticker in sorted(set(tickers)):
         ticker = ticker.upper()
 
-        # Ensure Asset exists
         asset = db.query(models.Asset).filter_by(ticker=ticker).first()
         if not asset:
             info = yf_service.get_stock_info(ticker)
@@ -64,12 +62,10 @@ def scan_market(db: Session = Depends(get_db)):
 
         assets_touched += 1
 
-        # Fetch recent history
         prices_df = yf_service.get_historical_data(ticker)
         if prices_df is None or prices_df.empty:
             continue
 
-        # Store latest price row
         latest = prices_df.sort_values("Date").iloc[-1]
         latest_date = latest["Date"].date()
 
@@ -90,20 +86,36 @@ def scan_market(db: Session = Depends(get_db)):
             )
             db.add(price)
 
-        # Compute baseline prediction & store ModelPrediction
+        # Compute baseline prediction using the new richer schema
         baseline = yf_service.compute_baseline_prediction(prices_df)
+
         prediction = models.ModelPrediction(
             asset_id=asset.id,
             as_of_date=latest_date,
-            model_name="baseline-heuristic-v0",
-            positive_30d_prob=baseline["positive_30d_prob"],
-            expected_return_30d=baseline["expected_return_30d"],
-            expected_return_low=baseline["expected_return_low"],
-            expected_return_high=baseline["expected_return_high"],
-            confidence=baseline["confidence"],
-            risk_level=str(baseline["risk_level"]),
-            ai_score=baseline["ai_score"],
-            ai_score_explanation=str(baseline["ai_score_explanation"]),
+            model_name="baseline-heuristic-v1",
+            forecast_horizon=30,
+            expected_return=baseline.get("expected_return_30d"),
+            expected_volatility=baseline.get("expected_volatility_30d"),
+            expected_low=baseline.get("expected_return_low"),
+            expected_high=baseline.get("expected_return_high"),
+            probability_positive=baseline.get("positive_30d_prob"),
+            probability_5_percent=baseline.get("prob_5_percent"),
+            probability_minus5_percent=baseline.get("prob_minus5_percent"),
+            trend_score=baseline.get("trend_score"),
+            momentum_score=baseline.get("momentum_score"),
+            quality_score=baseline.get("quality_score"),
+            valuation_score=baseline.get("valuation_score"),
+            risk_score=baseline.get("risk_score"),
+            volume_score=baseline.get("volume_score"),
+            sentiment_score=baseline.get("sentiment_score"),
+            confidence_score=baseline.get("confidence"),
+            backtest_accuracy=None,
+            win_rate=None,
+            avg_return=None,
+            avg_drawdown=None,
+            avg_prediction_error=None,
+            ai_score=baseline.get("ai_score"),
+            ai_score_explanation=str(baseline.get("ai_score_explanation", "")),
         )
         db.add(prediction)
         predictions_created += 1
@@ -152,12 +164,27 @@ def analyze_ticker(ticker: str, db: Session = Depends(get_db)):
         "latest_price": latest_price.close if latest_price else None,
         "prediction": {
             "model_name": latest_prediction.model_name if latest_prediction else None,
-            "positive_30d_prob": latest_prediction.positive_30d_prob if latest_prediction else None,
-            "expected_return_30d": latest_prediction.expected_return_30d if latest_prediction else None,
-            "expected_return_low": latest_prediction.expected_return_low if latest_prediction else None,
-            "expected_return_high": latest_prediction.expected_return_high if latest_prediction else None,
-            "confidence": latest_prediction.confidence if latest_prediction else None,
-            "risk_level": latest_prediction.risk_level if latest_prediction else None,
+            "forecast_horizon": latest_prediction.forecast_horizon if latest_prediction else None,
+            "expected_return": latest_prediction.expected_return if latest_prediction else None,
+            "expected_volatility": latest_prediction.expected_volatility if latest_prediction else None,
+            "expected_low": latest_prediction.expected_low if latest_prediction else None,
+            "expected_high": latest_prediction.expected_high if latest_prediction else None,
+            "probability_positive": latest_prediction.probability_positive if latest_prediction else None,
+            "probability_5_percent": latest_prediction.probability_5_percent if latest_prediction else None,
+            "probability_minus5_percent": latest_prediction.probability_minus5_percent if latest_prediction else None,
+            "trend_score": latest_prediction.trend_score if latest_prediction else None,
+            "momentum_score": latest_prediction.momentum_score if latest_prediction else None,
+            "quality_score": latest_prediction.quality_score if latest_prediction else None,
+            "valuation_score": latest_prediction.valuation_score if latest_prediction else None,
+            "risk_score": latest_prediction.risk_score if latest_prediction else None,
+            "volume_score": latest_prediction.volume_score if latest_prediction else None,
+            "sentiment_score": latest_prediction.sentiment_score if latest_prediction else None,
+            "confidence_score": latest_prediction.confidence_score if latest_prediction else None,
+            "backtest_accuracy": latest_prediction.backtest_accuracy if latest_prediction else None,
+            "win_rate": latest_prediction.win_rate if latest_prediction else None,
+            "avg_return": latest_prediction.avg_return if latest_prediction else None,
+            "avg_drawdown": latest_prediction.avg_drawdown if latest_prediction else None,
+            "avg_prediction_error": latest_prediction.avg_prediction_error if latest_prediction else None,
             "ai_score": latest_prediction.ai_score if latest_prediction else None,
             "ai_score_explanation": latest_prediction.ai_score_explanation if latest_prediction else None,
         },
@@ -182,9 +209,11 @@ def top_stocks(limit: int = 10, db: Session = Depends(get_db)):
                 "ticker": asset.ticker,
                 "company": asset.name,
                 "ai_score": pred.ai_score,
-                "expected_return": pred.expected_return_30d,
-                "confidence": pred.confidence,
-                "risk": pred.risk_level,
+                "expected_return": pred.expected_return,
+                "expected_range": [pred.expected_low, pred.expected_high],
+                "probability_positive": pred.probability_positive,
+                "confidence": pred.confidence_score,
+                "risk": pred.risk_score,
                 "sector": asset.sector,
                 "reason": pred.ai_score_explanation,
             }
@@ -211,9 +240,11 @@ def top_etfs(limit: int = 10, db: Session = Depends(get_db)):
                 "ticker": asset.ticker,
                 "company": asset.name,
                 "ai_score": pred.ai_score,
-                "expected_return": pred.expected_return_30d,
-                "confidence": pred.confidence,
-                "risk": pred.risk_level,
+                "expected_return": pred.expected_return,
+                "expected_range": [pred.expected_low, pred.expected_high],
+                "probability_positive": pred.probability_positive,
+                "confidence": pred.confidence_score,
+                "risk": pred.risk_score,
                 "sector": asset.sector,
                 "reason": pred.ai_score_explanation,
             }
